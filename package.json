@@ -1,0 +1,46 @@
+{
+    "type": "module",
+    "name": "natureshare-oauth",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+        "db-migrate": "db-migrate",
+        "start": "node --experimental-modules index.js",
+        "dev": "nodemon ./index.js",
+        "linter": "eslint --fix --ext .js,.mjs,.cjs,.jsx --ignore-path .gitignore .",
+        "prettier": "prettier --write '*.js' 'app/**/*.js' 'migrations/**/*.js'"
+    },
+    "author": "Reilly Beacom",
+    "license": "Copyright",
+    "dependencies": {
+        "body-parser": "^1.19.0",
+        "connect-pg-simple": "^6.1.0",
+        "cors": "^2.8.5",
+        "db-migrate": "^0.11.11",
+        "db-migrate-pg": "^1.2.2",
+        "dotenv": "^8.2.0",
+        "express": "^4.17.1",
+        "express-session": "^1.17.1",
+        "express-useragent": "^1.0.15",
+        "glob": "^7.1.6",
+        "grant": "^5.2.0",
+        "js-yaml": "^3.14.0",
+        "jsonwebtoken": "^8.5.1",
+        "lodash": "^4.17.19",
+        "moment": "^2.27.0",
+        "node-jose": "^1.1.4",
+        "pg": "^8.3.0",
+        "uuid": "^8.3.0"
+    },
+    "devDependencies": {
+        "eslint": "^6.8.0",
+        "eslint-config-airbnb-base": "^14.2.0",
+        "eslint-config-prettier": "^6.11.0",
+        "eslint-plugin-import": "^2.21.2",
+        "eslint-plugin-prettier": "^3.1.4",
+        "nodemon": "^2.0.4",
+        "prettier": "^2.0.5",
+        "standard": "^14.3.4"
+    }
+}

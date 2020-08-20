@@ -1,0 +1,21 @@
+version: '3'
+
+services:
+  node:
+    depends_on:
+      - postgres
+    image: "node:12"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgres://express:express@postgres:5432/express
+      - POSTGRES_SSL=no
+    volumes:
+      - .:/var/app:cached
+    ports:
+      - 3003:3000
+    working_dir: /var/app
+    networks:
+      - www
+      - default
+    command: sh -c "npm run start"

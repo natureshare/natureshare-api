@@ -1,0 +1,22 @@
+version: '3'
+
+networks:
+  www:
+    external:
+      name: www
+
+volumes:
+  postgres_data:
+
+services:
+  postgres:
+    image: postgres:12
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/var/data/backups:delegated
+    environment:
+      - POSTGRES_USER=express
+      - POSTGRES_PASSWORD=express
+    ports:
+      - 5432:5432
+    restart: unless-stopped

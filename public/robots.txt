@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /actions
+Disallow: /auth
+Disallow: /connect
+Disallow: /user
+Disallow: /users
+
