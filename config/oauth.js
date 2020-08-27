@@ -12,10 +12,16 @@ export default {
         secret: process.env.OAUTH_GOOGLE_SECRET,
         // https://developers.google.com/identity/protocols/oauth2/scopes
         scope: [
+            'openid',
+            'email',
             'https://www.googleapis.com/auth/photoslibrary.readonly',
             'https://www.googleapis.com/auth/youtube.readonly',
         ],
-        access_type: 'offline',
+        nonce: true,
+        custom_params: {
+            access_type: "offline",
+            prompt: "select_account",
+        },
     },
     flickr: {
         key: process.env.OAUTH_FLICKR_KEY,
@@ -41,4 +47,11 @@ export default {
         secret: process.env.OAUTH_INSTAGRAM_SECRET,
         scope: 'user_profile user_media',
     },
+    inaturalist: {
+        key: process.env.OAUTH_INATURALIST_KEY,
+        secret: process.env.OAUTH_INATURALIST_SECRET,
+        authorize_url: 'https://www.inaturalist.org/oauth/authorize',
+        access_url: 'https://www.inaturalist.org/oauth/token',
+        oauth: 2,
+    }
 };

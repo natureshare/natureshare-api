@@ -38,13 +38,14 @@ export default function connect({ app, db }) {
         ].forEach((path) => {
             if (path) {
                 app.get(path, (request, response) => {
+                    if (process.env.NODE_ENV !== 'production') {
+                        console.log(request.session.grant.response.raw);
+                    }
                     const redirect = () =>
                         response.redirect(new URL('/upload', process.env.APP_HOST));
                     const username = getUsernameFromAuth(request.session.authorization);
                     if (username) {
-                        encrypt(
-                            JSON.stringify(request.session.grant.response.raw || { testing: 123 }),
-                        )
+                        encrypt(JSON.stringify(request.session.grant.response.raw || {}))
                             .then((encrypted) => {
                                 db.query(
                                     `UPDATE public.user SET data = jsonb_set((SELECT data FROM public.user WHERE name = $1 LIMIT 1), '{oauth, ${provider}}', $2, true), updated_at = $3 WHERE name = $1`,
