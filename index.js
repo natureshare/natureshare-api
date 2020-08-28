@@ -61,7 +61,10 @@ app.use(requestLogger);
 
 app.use(
     cors({
-        origin: true,
+        origin: [
+            process.env.APP_HOST.replace(/\/$/, ''),
+            ...((process.env.APP_HOST_CORS || '').split(',').map(s => s.replace(/\/$/, ''))),
+        ],
         credentials: true,
     }),
 );
@@ -83,7 +86,7 @@ app.use(
 app.use(bodyParser.json());
 
 app.get('/', (request, response) => {
-    response.redirect(307, 'https://natureshare.org.au/');
+    response.redirect(307, process.env.APP_HOST);
 });
 
 user({ app, db });
