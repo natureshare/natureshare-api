@@ -1,20 +1,23 @@
+/* global process URL URLSearchParams */
+
 import fs from 'fs';
 
 export default function observations({ app }) {
     const observationsIndex = JSON.parse(fs.readFileSync('legacyObservationsIndex.json'));
 
     app.get('/observations/:id', (request, response) => {
-        // temporary: 307
-        // permanent: 308
+        const url = new URL(process.env.APP_HOST);
         if (request.params.id && observationsIndex[request.params.id]) {
+            url.pathname = '/item';
+            url.search = new URLSearchParams({ i: [observationsIndex[request.params.id], `${request.params.id}.yaml`].join('/') });
+            // permanent: 308
             response.redirect(
                 308,
-                `https://natureshare.org.au/item?i=${encodeURIComponent(
-                    [observationsIndex[request.params.id], `${request.params.id}.yaml`].join('/'),
-                )}`,
+                url.href
             );
         } else {
-            response.redirect(307, 'https://natureshare.org.au/');
+            // temporary: 307
+            response.redirect(307, url.href);
         }
     });
 }
