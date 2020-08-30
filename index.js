@@ -63,7 +63,7 @@ app.use(
     cors({
         origin: [
             process.env.APP_HOST.replace(/\/$/, ''),
-            ...((process.env.APP_HOST_CORS || '').split(',').map(s => s.replace(/\/$/, ''))),
+            ...(process.env.APP_HOST_CORS || '').split(',').map((s) => s.replace(/\/$/, '')),
         ],
         credentials: true,
     }),

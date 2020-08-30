@@ -40,61 +40,46 @@ const rateLimits = {
     runUserMediaImport: [1, 2, 'hours', true],
 };
 
+const feed = ({ rows, path, after }) => ({
+    version: 'https://jsonfeed.org/version/1',
+    title: 'Actions',
+    description: '',
+    home_page_url: process.env.APP_HOST,
+    feed_url: new URL(path, process.env.API_HOST).href,
+    items: rows.map(({ uuid: id, created_at: date, sender, recipient, action, target, data }) => ({
+        id,
+        url: new URL(`${path}/${id}`, process.env.API_HOST).href,
+        title: action,
+        author: {
+            name: sender,
+            url: new URL(
+                `/profile?i=${encodeURIComponent(`./${recipient}/actions`)}`,
+                process.env.APP_HOST,
+            ).href,
+        },
+        content_text: yaml.safeDump(data),
+        date_published: date,
+        date_modified: date,
+        _meta: {
+            recipient,
+            target,
+        },
+    })),
+    _meta: {
+        itemCount: rows.length,
+        after,
+    },
+});
+
 export default ({ app, db }) => {
     app.get('/actions', (request, response) => {
         const after = moment(request.query.after).toISOString(true);
         db.query(
-            'SELECT * FROM public.actions WHERE created_at > $1 ORDER BY created_at ASC LIMIT 100',
-            [after],
+            'SELECT * FROM public.actions WHERE created_at > $1 ORDER BY created_at ASC LIMIT $2',
+            [after, request.query.limit || 100],
         )
             .then((result) => {
-                const feed = {
-                    version: 'https://jsonfeed.org/version/1',
-                    title: 'Actions',
-                    description: '',
-                    home_page_url: process.env.APP_HOST,
-                    feed_url: new URL(request.path, process.env.API_HOST).href,
-                    items: result.rows.map(
-                        ({
-                            uuid: id,
-                            created_at: date,
-                            sender,
-                            recipient,
-                            url,
-                            action,
-                            target,
-                            data,
-                        }) => ({
-                            id,
-                            url:
-                                url ||
-                                new URL(
-                                    `/actions?i=${encodeURIComponent(`./${recipient}`)}`,
-                                    process.env.APP_HOST,
-                                ).href,
-                            title: action,
-                            author: {
-                                name: sender,
-                                url: new URL(
-                                    `/profile?i=${encodeURIComponent(`./${recipient}/actions`)}`,
-                                    process.env.APP_HOST,
-                                ).href,
-                            },
-                            content_text: yaml.safeDump(data),
-                            date_published: date,
-                            date_modified: date,
-                            _meta: {
-                                recipient,
-                                target,
-                            },
-                        }),
-                    ),
-                    _meta: {
-                        itemCount: result.rowCount,
-                        after,
-                    },
-                };
-                response.send(feed);
+                response.send(feed({ rows: result.rows, path: request.path, after }));
             })
             .catch((e) => {
                 console.error(e);
@@ -177,4 +162,60 @@ export default ({ app, db }) => {
             }
         }
     });
+
+    ['get', 'delete'].forEach((method) => {
+        app[method]('/actions/:uuid', (request, response) => {
+            if (
+                method === 'get' ||
+                request.headers.authorization === `API_TOKEN ${process.env.API_TOKEN}` ||
+                request.query.API_TOKEN === process.env.API_TOKEN
+            ) {
+                db.query(
+                    method === 'delete'
+                        ? 'DELETE FROM public.actions WHERE uuid = $1 RETURNING *'
+                        : 'SELECT * FROM public.actions WHERE uuid = $1',
+                    [request.params.uuid],
+                )
+                    .then((result) => {
+                        response.send(feed({ rows: result.rows, path: request.path, after: null }));
+                    })
+                    .catch((e) => {
+                        console.error(e);
+                        response.status(500).send({ errors: { error: ['unknown'] } });
+                    });
+            } else {
+                response
+                    .status(403) // Forbidden
+                    .send({ errors: { API_TOKEN: ['mismatch'] } });
+            }
+        });
+    });
+
+    if (process.env.NODE_ENV !== 'production') {
+        app.delete('/actions/pop', (request, response) => {
+            const after = moment(request.query.after).toISOString(true);
+            db.query(
+                'DELETE FROM public.actions WHERE uuid IN (SELECT uuid FROM public.actions WHERE created_at > $1 ORDER BY created_at ASC LIMIT 1) RETURNING *',
+                [after],
+            )
+                .then((result) => {
+                    response.send(feed({ rows: result.rows, path: request.path, after: null }));
+                })
+                .catch((e) => {
+                    console.error(e);
+                    response.status(500).send({ errors: { error: ['unknown'] } });
+                });
+        });
+
+        app.get('/actions/delete/all', (request, response) => {
+            db.query('DELETE FROM public.actions RETURNING *')
+                .then((result) => {
+                    response.send(feed({ rows: result.rows, path: request.path, after: null }));
+                })
+                .catch((e) => {
+                    console.error(e);
+                    response.status(500).send({ errors: { error: ['unknown'] } });
+                });
+        });
+    }
 };
