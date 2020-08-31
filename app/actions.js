@@ -1,5 +1,6 @@
 /* global process URL */
 
+import fetch from 'node-fetch';
 import moment from 'moment';
 import yaml from 'js-yaml';
 import { v4 as uuid } from 'uuid';
@@ -40,52 +41,63 @@ const rateLimits = {
     runUserMediaImport: [1, 2, 'hours', true],
 };
 
-const feed = ({ rows, path, after }) => ({
-    version: 'https://jsonfeed.org/version/1',
-    title: 'Actions',
-    description: '',
-    home_page_url: process.env.APP_HOST,
-    feed_url: new URL(path, process.env.API_HOST).href,
-    items: rows.map(({ uuid: id, created_at: date, sender, recipient, action, target, data }) => ({
-        id,
-        url: new URL(`${path}/${id}`, process.env.API_HOST).href,
-        title: action,
-        author: {
-            name: sender,
-            url: new URL(
-                `/profile?i=${encodeURIComponent(`./${recipient}/actions`)}`,
-                process.env.APP_HOST,
-            ).href,
-        },
-        content_text: yaml.safeDump(data),
-        date_published: date,
-        date_modified: date,
-        _meta: {
-            recipient,
-            target,
-        },
-    })),
-    _meta: {
-        itemCount: rows.length,
-        after,
-    },
-});
-
 export default ({ app, db }) => {
-    app.get('/actions', (request, response) => {
-        const after = moment(request.query.after).toISOString(true);
-        db.query(
-            'SELECT * FROM public.actions WHERE created_at > $1 ORDER BY created_at ASC LIMIT $2',
-            [after, request.query.limit || 100],
-        )
-            .then((result) => {
-                response.send(feed({ rows: result.rows, path: request.path, after }));
-            })
-            .catch((e) => {
-                console.error(e);
-                response.status(500).send({ errors: { error: ['unknown'] } });
-            });
+    const feed = ({ rows, path, after }) => ({
+        version: 'https://jsonfeed.org/version/1',
+        title: 'Actions',
+        description: '',
+        home_page_url: process.env.APP_HOST,
+        feed_url: new URL(path, process.env.API_HOST).href,
+        items: rows.map(
+            ({
+                uuid: id,
+                created_at: createdAt,
+                deleted_at: deletedAt,
+                sender,
+                recipient,
+                action,
+                target,
+                data,
+            }) => ({
+                id,
+                url: new URL(`${path}/${id}`, process.env.API_HOST).href,
+                title: action,
+                author: {
+                    name: sender,
+                    url: new URL(
+                        `/profile?i=${encodeURIComponent(`./${recipient}/actions`)}`,
+                        process.env.APP_HOST,
+                    ).href,
+                },
+                content_text: yaml.safeDump(data),
+                date_published: createdAt,
+                date_modified: deletedAt || createdAt,
+                _meta: {
+                    recipient,
+                    target,
+                },
+            }),
+        ),
+        _meta: {
+            itemCount: rows.length,
+            after,
+        },
     });
+
+    const workflowDispatch = () => {
+        if (process.env.WORKFLOW_REPO && process.env.WORKFLOW_TOKEN) {
+            fetch(`https://api.github.com/repos/${process.env.WORKFLOW_REPO}/dispatches`, {
+                headers: {
+                    Accept: 'application/vnd.github.everest-preview+json',
+                    Authorization: `token ${process.env.WORKFLOW_TOKEN}`,
+                },
+                method: 'POST',
+                body: JSON.stringify({ event_type: 'api-actions' }),
+            })
+                .then((r) => console.log('Workflow dispatch: ', r.status))
+                .catch(console.error);
+        }
+    };
 
     app.post('/actions', (request, response) => {
         const sender = getUsername(request);
@@ -144,12 +156,22 @@ export default ({ app, db }) => {
                                         data,
                                     ],
                                 )
-                                    .then(() =>
+                                    .then(() => {
+                                        db.query(
+                                            'SELECT count(*) FROM public.actions WHERE deleted_at IS NULL',
+                                        )
+                                            .then((r) => {
+                                                if (r.rows[0].count === '1') {
+                                                    workflowDispatch();
+                                                }
+                                            })
+                                            .catch(() => {});
+
                                         response.send({
                                             message:
                                                 'Saved. Changes may take up to a day to appear on the website.',
-                                        }),
-                                    )
+                                        });
+                                    })
                                     .catch(() =>
                                         response
                                             .status(422)
@@ -163,59 +185,57 @@ export default ({ app, db }) => {
         }
     });
 
-    ['get', 'delete'].forEach((method) => {
-        app[method]('/actions/:uuid', (request, response) => {
-            if (
-                method === 'get' ||
-                request.headers.authorization === `API_TOKEN ${process.env.API_TOKEN}` ||
-                request.query.API_TOKEN === process.env.API_TOKEN
-            ) {
-                db.query(
-                    method === 'delete'
-                        ? 'DELETE FROM public.actions WHERE uuid = $1 RETURNING *'
-                        : 'SELECT * FROM public.actions WHERE uuid = $1',
-                    [request.params.uuid],
-                )
-                    .then((result) => {
-                        response.send(feed({ rows: result.rows, path: request.path, after: null }));
-                    })
-                    .catch((e) => {
-                        console.error(e);
-                        response.status(500).send({ errors: { error: ['unknown'] } });
-                    });
-            } else {
-                response
-                    .status(403) // Forbidden
-                    .send({ errors: { API_TOKEN: ['mismatch'] } });
-            }
-        });
+    app.get('/actions', (request, response) => {
+        const after = moment(request.query.after).toISOString(true);
+        db.query(
+            'SELECT * FROM public.actions WHERE deleted_at IS NULL ORDER BY created_at ASC LIMIT 100',
+        )
+            .then((result) => {
+                response.send(feed({ rows: result.rows, path: request.path, after }));
+            })
+            .catch((e) => {
+                console.error(e);
+                response.status(500).send({ errors: { error: ['unknown'] } });
+            });
     });
 
-    if (process.env.NODE_ENV !== 'production') {
-        app.delete('/actions/pop', (request, response) => {
-            const after = moment(request.query.after).toISOString(true);
-            db.query(
-                'DELETE FROM public.actions WHERE uuid IN (SELECT uuid FROM public.actions WHERE created_at > $1 ORDER BY created_at ASC LIMIT 1) RETURNING *',
-                [after],
-            )
-                .then((result) => {
-                    response.send(feed({ rows: result.rows, path: request.path, after: null }));
-                })
-                .catch((e) => {
-                    console.error(e);
-                    response.status(500).send({ errors: { error: ['unknown'] } });
-                });
-        });
+    app.get('/actions/:uuid', (request, response) => {
+        db.query('SELECT * FROM public.actions WHERE uuid = $1', [request.params.uuid])
+            .then((result) => {
+                response.send(feed({ rows: result.rows, path: request.path, after: null }));
+            })
+            .catch((e) => {
+                console.error(e);
+                response.status(500).send({ errors: { error: ['unknown'] } });
+            });
+    });
 
-        app.get('/actions/delete/all', (request, response) => {
-            db.query('DELETE FROM public.actions RETURNING *')
-                .then((result) => {
-                    response.send(feed({ rows: result.rows, path: request.path, after: null }));
+    app.delete('/actions/:uuid', (request, response) => {
+        if (
+            request.headers.authorization === `API_TOKEN ${process.env.API_TOKEN}` ||
+            request.query.API_TOKEN === process.env.API_TOKEN
+        ) {
+            db.query('DELETE FROM public.actions WHERE deleted_at <= $1', [
+                moment().subtract(7, 'days').toISOString(),
+            ])
+                .then(() => {})
+                .catch(console.error);
+
+            db.query('UPDATE public.actions SET deleted_at = $1 WHERE uuid = $2', [
+                moment().toISOString(),
+                request.params.uuid,
+            ])
+                .then(() => {
+                    response.send({});
                 })
                 .catch((e) => {
                     console.error(e);
                     response.status(500).send({ errors: { error: ['unknown'] } });
                 });
-        });
-    }
+        } else {
+            response
+                .status(403) // Forbidden
+                .send({ errors: { API_TOKEN: ['mismatch'] } });
+        }
+    });
 };
