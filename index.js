@@ -39,6 +39,16 @@ db.query('SELECT COUNT(*) FROM public.migrations')
 
 const app = express();
 
+app.use(
+    cors({
+        origin: [
+            process.env.APP_HOST.replace(/\/$/, ''),
+            ...(process.env.APP_HOST_CORS || '').split(',').map((s) => s.replace(/\/$/, '')),
+        ],
+        credentials: true,
+    }),
+);
+
 app.use(express.static('public'));
 
 app.use(useragent.express());
@@ -58,16 +68,6 @@ const requestLogger = (request, response, next) => {
 };
 
 app.use(requestLogger);
-
-app.use(
-    cors({
-        origin: [
-            process.env.APP_HOST.replace(/\/$/, ''),
-            ...(process.env.APP_HOST_CORS || '').split(',').map((s) => s.replace(/\/$/, '')),
-        ],
-        credentials: true,
-    }),
-);
 
 const SessionStore = connectPgSimple(session);
 

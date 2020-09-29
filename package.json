@@ -8,11 +8,12 @@
         "db-migrate": "db-migrate",
         "start": "node --experimental-modules index.js",
         "dev": "nodemon ./index.js",
+        "jsgl": "jsgl --local .",
         "linter": "eslint --fix --ext .js,.mjs,.cjs,.jsx --ignore-path .gitignore .",
         "prettier": "prettier --write '*.js' 'app/**/*.js' 'migrations/**/*.js'"
     },
-    "author": "Reilly Beacom",
-    "license": "Copyright",
+    "author": "multipolygon",
+    "license": "MIT",
     "dependencies": {
         "body-parser": "^1.19.0",
         "connect-pg-simple": "^6.1.0",
@@ -25,6 +26,7 @@
         "express-useragent": "^1.0.15",
         "glob": "^7.1.6",
         "grant": "^5.2.0",
+        "js-green-licenses": "^2.0.1",
         "js-yaml": "^3.14.0",
         "jsonwebtoken": "^8.5.1",
         "lodash": "^4.17.19",
